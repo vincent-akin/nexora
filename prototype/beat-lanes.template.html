@@ -9,6 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /*__CSS__*/
+/* Page-level tokens; the game's own tokens live on .stage. */
+:root { --ink: #fff; --ink-dim: #CDBBF0; --display: 'Fredoka', 'Baloo 2', system-ui, sans-serif; --body: 'Nunito', system-ui, sans-serif; }
 *, *::before, *::after { box-sizing: border-box; }
 html { height: 100%; }
 body {
@@ -21,7 +23,7 @@ body {
 .wordmark { display: inline-flex; align-items: center; gap: 8px; font: 700 26px/1 var(--display); text-shadow: 0 3px 0 #2A0B5E; }
 .wordmark .mascot { width: 38px; height: 38px; animation: bob 2.6s ease-in-out infinite; }
 .top small { color: var(--ink-dim); font-weight: 700; }
-.panel[hidden], .floating-cancel[hidden], .popup-back[hidden] { display: none; }
+.stage .panel[hidden], .stage .floating-cancel[hidden], .stage .popup-back[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -57,7 +59,7 @@ body {
         <button class="btn quiet" id="botBtn" type="button">Watch a bot play</button>
       </div>
       <p class="hint" id="bestLine"></p>
-      <p class="hint">Keys: D F J K, or tap the lanes. Tapping an empty lane costs a life.</p>
+      <p class="hint">Tap a tile to pop it. Closer to the keys scores more. Tapping an empty lane costs a life. Keys: D F J K.</p>
     </section>
 
     <div class="floating-cancel" id="calCancelWrap" hidden><button class="btn" id="calCancel" type="button">Cancel</button></div>
@@ -69,6 +71,7 @@ body {
       <dl class="stats">
         <div><dt>Perfect</dt><dd id="sPerfect">0</dd></div>
         <div><dt>Good</dt><dd id="sGood">0</dd></div>
+        <div><dt>Early</dt><dd id="sEarly">0</dd></div>
         <div><dt>Missed</dt><dd id="sMiss">0</dd></div>
         <div><dt>Empty taps</dt><dd id="sStray">0</dd></div>
         <div><dt>Best combo</dt><dd id="sCombo">0</dd></div>
@@ -187,7 +190,7 @@ body {
 
     $('resTitle').textContent = final.completed ? 'Song complete!' : 'Out of lives!';
     countUp($('resScore'), final.score, 900);
-    $('sPerfect').textContent = final.perfects; $('sGood').textContent = final.goods;
+    $('sPerfect').textContent = final.perfects; $('sGood').textContent = final.goods; $('sEarly').textContent = final.earlies;
     $('sMiss').textContent = final.misses; $('sStray').textContent = final.strays;
     $('sCombo').textContent = final.maxCombo; $('sAcc').textContent = Math.round(final.accuracy * 100) + '%';
     $('stars').setAttribute('aria-label', stars + ' out of 3 stars');

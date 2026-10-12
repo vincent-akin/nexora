@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Icon from './Icon';
+import LineIcon from './LineIcon';
 import RewardPopup, { type Chip } from './RewardPopup';
 
 interface Props {
@@ -53,12 +53,12 @@ export default function ClaimButton({ url, body, label, disabled, title = 'Rewar
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <button className="btn primary" type="button" onClick={claim} disabled={busy || disabled}>
-        <Icon name="gift" size={22} /> {label}
+        <LineIcon name="gift" size={18} /> {label}
       </button>
       {msg ? <span className="notice" role="status">{msg}</span> : null}
       {popup ? (
         <RewardPopup
-          fixed title={title} bigIcon={bigIcon} chips={popup.chips}
+          variant="shell" title={title} bigIcon={bigIcon} chips={popup.chips}
           subtitle={popup.streak ? `${popup.streak} day streak!` : undefined}
           onClose={() => { setPopup(null); router.refresh(); }}
         />

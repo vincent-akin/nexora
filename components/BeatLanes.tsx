@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import '@/styles/game.css';
 import { BeatLanesEngine, starsFor, type FinishInfo } from '@/lib/beat-lanes/engine';
 import { DIFFICULTY, OFFSET_LIMIT_MS, type Difficulty } from '@/lib/beat-lanes/core';
 import { DIFFICULTY_MIN_LEVEL, levelForXp, type LevelRow } from '@/lib/beat-lanes/progression';
@@ -22,6 +23,7 @@ interface ServerResult {
   maxCombo?: number;
   perfects?: number;
   goods?: number;
+  earlies?: number;
   misses?: number;
   strays?: number;
   completed?: boolean;
@@ -214,7 +216,7 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
               ))}
             </span>
           </div>
-          <p className="hint">Keys: D F J K, or tap the lanes. Tapping an empty lane costs a life.</p>
+          <p className="hint">Tap a tile to pop it. Closer to the keys scores more. Tapping an empty lane costs a life. Keys: D F J K.</p>
         </section>
       ) : null}
 
@@ -250,6 +252,7 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
               <dl className="stats">
                 <div><dt>Perfect</dt><dd>{result.perfects}</dd></div>
                 <div><dt>Good</dt><dd>{result.goods}</dd></div>
+                <div><dt>Early</dt><dd>{result.earlies}</dd></div>
                 <div><dt>Missed</dt><dd>{result.misses}</dd></div>
                 <div><dt>Empty taps</dt><dd>{result.strays}</dd></div>
                 <div><dt>Best combo</dt><dd>{result.maxCombo}</dd></div>

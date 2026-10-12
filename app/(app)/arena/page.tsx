@@ -1,34 +1,93 @@
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { levelForXp, type LevelRow } from '@/lib/beat-lanes/progression';
-import { currentStamina } from '@/lib/stamina';
-import BeatLanes from '@/components/BeatLanes';
+import LineIcon from '@/components/LineIcon';
 
 export const dynamic = 'force-dynamic';
+
+interface GameInfo {
+  slug: string;
+  title: string;
+  tagline: string;
+  icon: string;
+  art: string;
+  minLevel: number;
+  /** Built games link to their own screen. The rest show as upcoming. */
+  live: boolean;
+  meta: { icon: string; text: string }[];
+}
+
+// Each game gets its own screen and its own look. The hub only lists them.
+const GAMES: GameInfo[] = [
+  { slug: 'beat-lanes', title: 'Beat Lanes', tagline: 'Tap the falling tiles in time and make a tune.', icon: 'music', art: 'art-beat', minLevel: 1, live: true,
+    meta: [{ icon: 'clock', text: '45 to 75 s' }, { icon: 'bolt', text: '1 stamina' }] },
+  { slug: 'card-clash', title: 'Card Clash', tagline: 'Match every pair before the vault locks.', icon: 'cards', art: 'art-cards', minLevel: 2, live: true,
+    meta: [{ icon: 'clock', text: 'About 1 min' }, { icon: 'bolt', text: '1 stamina' }] },
+  { slug: 'type-sprint', title: 'Type Sprint', tagline: 'Race through words as fast and clean as you can.', icon: 'keyboard', art: 'art-type', minLevel: 3, live: false,
+    meta: [{ icon: 'clock', text: '30 s' }, { icon: 'bolt', text: '1 stamina' }] },
+  { slug: 'market-detective', title: 'Market Detective', tagline: 'Read the charts and spot the standout performer.', icon: 'chart', art: 'art-market', minLevel: 4, live: false,
+    meta: [{ icon: 'clock', text: 'About 2 min' }, { icon: 'bolt', text: '1 stamina' }] },
+];
+
+function Art({ kind }: { kind: string }) {
+  if (kind === 'art-market') {
+    return (
+      <div className="game-art art-market" aria-hidden="true">
+        <svg viewBox="0 0 300 110" preserveAspectRatio="none">
+          <polyline points="0,90 40,70 80,78 120,40 160,55 200,25 240,38 300,8" fill="none" stroke="#5B8CFF" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+          <polyline points="0,100 50,92 90,96 140,80 190,86 240,70 300,62" fill="none" stroke="#2DD4BF" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" opacity=".7" />
+        </svg>
+      </div>
+    );
+  }
+  return <div className={`game-art ${kind}`} aria-hidden="true"><i /><i /><i /><i /></div>;
+}
 
 export default async function Arena() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const [{ data: bal }, { data: stam }, { data: rules }, { data: levels }] = await Promise.all([
+  const [{ data: bal }, { data: levels }] = await Promise.all([
     supabase.from('player_balances').select('xp').eq('user_id', user!.id).single(),
-    supabase.from('player_stamina').select('stamina,updated_at').eq('user_id', user!.id).single(),
-    supabase.from('rules_versions').select('config').eq('active', true).single(),
     supabase.from('level_config').select('level,name,xp_required'),
   ]);
-
-  const cfg = (rules?.config ?? { stamina_cap: 10, stamina_refill_seconds: 1200 }) as { stamina_cap: number; stamina_refill_seconds: number };
   const level = levelForXp(Number(bal?.xp ?? 0), (levels ?? []) as LevelRow[]);
-  const stamina = stam ? currentStamina(stam, cfg).value : 0;
 
   return (
     <main className="page">
-      <div>
+      <section className="page-head">
         <h1>Arena</h1>
-        <p className="dim">Each run costs one stamina point. Scores are checked on the server.</p>
-      </div>
-      <BeatLanes level={level.level} xp={Number(bal?.xp ?? 0)} levels={(levels ?? []) as LevelRow[]} stamina={stamina} staminaCap={cfg.stamina_cap} />
+        <p className="dim">Pick a game. Every game has its own screen, and all of them share your level, balances and stamina.</p>
+      </section>
+      <section className="games" aria-label="Games">
+        {GAMES.map((g) => {
+          const unlocked = level.level >= g.minLevel;
+          const playable = g.live && unlocked;
+          const body = (
+            <>
+              <Art kind={g.art} />
+              <div className="game-body">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <h2>{g.title}</h2>
+                  {playable ? <span className="pill live">Open</span> : <span className="pill locked"><LineIcon name="lock" size={12} /> {g.live ? `Level ${g.minLevel}` : 'Coming soon'}</span>}
+                </div>
+                <p className="dim">{g.tagline}</p>
+                <div className="game-meta">
+                  {g.meta.map((m) => <span key={m.text}><LineIcon name={m.icon} size={14} /> {m.text}</span>)}
+                </div>
+                <div className="game-foot">
+                  {playable ? <span className="btn primary" style={{ width: '100%' }}><LineIcon name={g.icon} /> Play</span>
+                    : <span className="btn" style={{ width: '100%', opacity: 0.6 }}>{g.live ? `Unlocks at level ${g.minLevel}` : 'In development'}</span>}
+                </div>
+              </div>
+            </>
+          );
+          return playable
+            ? <Link key={g.slug} href={`/arena/${g.slug}`} className="game-card live">{body}</Link>
+            : <div key={g.slug} className="game-card soon" aria-disabled="true">{body}</div>;
+        })}
+      </section>
     </main>
   );
 }

@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import Mascot from '@/components/Mascot';
+import Logo from '@/components/Logo';
 
 function LoginForm() {
   const router = useRouter();
@@ -44,25 +44,29 @@ function LoginForm() {
 
   return (
     <main className="auth">
-      <Mascot />
-      <h1>Nexora</h1>
-      <p className="dim" style={{ textAlign: 'center' }}>{mode === 'in' ? 'Welcome back! Sign in to keep playing.' : 'Create an account and start making music!'}</p>
-      {ref ? <p className="notice">You were invited with code {ref.toUpperCase()}.</p> : null}
-      <form onSubmit={onSubmit} className="page" style={{ gap: 14 }}>
-        <div className="field">
-          <label htmlFor="email">Email</label>
-          <input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="password">Password</label>
-          <input id="password" type="password" required minLength={8} autoComplete={mode === 'in' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        {message ? <p role="alert" className="notice">{message}</p> : null}
-        <button className="btn primary" type="submit" disabled={busy}>{mode === 'in' ? 'Sign in' : 'Create account'}</button>
-      </form>
-      <button className="btn" type="button" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setMessage(null); }}>
-        {mode === 'in' ? 'New here? Create an account' : 'Already have an account? Sign in'}
-      </button>
+      <div className="auth-head">
+        <Logo size={44} />
+        <h1>{mode === 'in' ? 'Welcome back' : 'Create your account'}</h1>
+        <p className="dim">{mode === 'in' ? 'Sign in to continue to Nexora.' : 'Play, compete and rise with Nexora.'}</p>
+      </div>
+      <div className="auth-card">
+        {ref ? <p className="notice">You were invited with code {ref.toUpperCase()}.</p> : null}
+        <form onSubmit={onSubmit} className="page" style={{ gap: 14 }}>
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <input id="password" type="password" required minLength={8} autoComplete={mode === 'in' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {message ? <p role="alert" className="notice">{message}</p> : null}
+          <button className="btn primary" type="submit" disabled={busy}>{mode === 'in' ? 'Sign in' : 'Create account'}</button>
+        </form>
+        <button className="btn ghost" type="button" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setMessage(null); }}>
+          {mode === 'in' ? 'New here? Create an account' : 'Already have an account? Sign in'}
+        </button>
+      </div>
     </main>
   );
 }

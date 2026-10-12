@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import Confetti from './Confetti';
 import Icon from './Icon';
+import LineIcon from './LineIcon';
 
 export interface Chip { icon: string; label: string; value: number }
 
@@ -11,13 +12,12 @@ interface Props {
   subtitle?: string;
   bigIcon?: string;
   chips?: Chip[];
-  /** Cover the whole page (true) or only the nearest positioned parent such as the game stage. */
-  fixed?: boolean;
+  /** 'game' is the bouncy candy popup (Beat Lanes). 'vault' is the gold-and-teal popup (Card Clash). 'shell' is the calm platform modal. */
+  variant?: 'game' | 'shell' | 'vault';
   onClose: () => void;
 }
 
-/** A bouncy celebratory popup with confetti. Closes on the button, a backdrop click, or Escape. */
-export default function RewardPopup({ title, subtitle, bigIcon = 'sparkle', chips = [], fixed = false, onClose }: Props) {
+export default function RewardPopup({ title, subtitle, bigIcon = 'sparkle', chips = [], variant = 'game', onClose }: Props) {
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     btn.current?.focus();
@@ -26,8 +26,41 @@ export default function RewardPopup({ title, subtitle, bigIcon = 'sparkle', chip
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  if (variant === 'vault') {
+    return (
+      <div className="v-popup-back" onClick={onClose} role="presentation">
+        <div className="v-popup" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+          <span className="big-ic"><Icon name={bigIcon} size={76} /></span>
+          <h2>{title}</h2>
+          {subtitle ? <p>{subtitle}</p> : null}
+          <button ref={btn} className="vbtn gold" type="button" onClick={onClose}>Continue</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (variant === 'shell') {
+    return (
+      <div className="modal-back" onClick={onClose} role="presentation">
+        <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+          <span className="modal-icon"><LineIcon name="check" size={26} /></span>
+          <h2>{title}</h2>
+          {subtitle ? <p className="dim">{subtitle}</p> : null}
+          {chips.length ? (
+            <ul className="reward-list">
+              {chips.map((c) => (
+                <li key={c.label}><Icon name={c.icon} size={22} /><span>{c.label}</span><b>+{c.value.toLocaleString()}</b></li>
+              ))}
+            </ul>
+          ) : null}
+          <button ref={btn} className="btn primary" type="button" onClick={onClose}>Continue</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`popup-back${fixed ? ' fixed' : ''}`} onClick={onClose} role="presentation">
+    <div className="popup-back" onClick={onClose} role="presentation">
       <Confetti />
       <div className="popup" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <span className="big-ic"><Icon name={bigIcon} size={84} /></span>

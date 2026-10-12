@@ -43,6 +43,7 @@ const LANE = [
 const GRADE = {
   perfect: { text: 'PERFECT!', color: '#FFF3B0' },
   good: { text: 'Good', color: '#9BF3FF' },
+  early: { text: 'Early', color: '#D2C6FF' },
   miss: { text: 'Miss', color: '#FF8FA3' },
 } as const;
 const DISPLAY = "'Fredoka', 'Baloo 2', 'Avenir Next Rounded', system-ui, sans-serif";
@@ -63,6 +64,7 @@ interface Particle {
 }
 interface Pop { text: string; x: number; y: number; at: number; life: number; color: string; size: number; rise: number }
 interface Ring { x: number; y: number; at: number; color: string; big: boolean }
+interface TilePop { lane: number; y: number; at: number }
 interface RunState {
   chart: Note[]; difficulty: Difficulty; offset: number; start: number;
   taps: Tap[]; lastTapByLane: number[]; pressedUntil: number[];
@@ -97,6 +99,7 @@ export class BeatLanesEngine {
   private particles: Particle[] = [];
   private pops: Pop[] = [];
   private rings: Ring[] = [];
+  private tilePops: TilePop[] = [];
   private stars = Array.from({ length: 38 }, () => ({ x: Math.random(), y: Math.random(), r: rnd(0.6, 1.8), ph: Math.random() * 6.28 }));
   private shapes = Array.from({ length: 16 }, (_, i) => ({
     x: Math.random(), y: Math.random(), s: rnd(12, 30), v: rnd(0.012, 0.04), type: i % 3, lane: i % 4,
@@ -135,7 +138,7 @@ export class BeatLanesEngine {
     this.cancelCalibration();
     const chart = generateChart(seed, difficulty);
     const offset = clampOffset(offsetMs);
-    this.particles = []; this.pops = []; this.rings = [];
+    this.particles = []; this.pops = []; this.rings = []; this.tilePops = [];
     this.run = {
       chart, difficulty, offset, start: performance.now(), taps: [],
       lastTapByLane: [-1e9, -1e9, -1e9, -1e9], pressedUntil: [0, 0, 0, 0],
@@ -339,6 +342,7 @@ export class BeatLanesEngine {
     this.particles = this.particles.filter((p) => p.life < p.max);
     this.pops = this.pops.filter((p) => now - p.at < p.life);
     this.rings = this.rings.filter((r) => now - r.at < 520);
+    this.tilePops = this.tilePops.filter((p) => now - p.at < 200);
 
     // background drift
     if (!this.reduceMotion) {
@@ -394,10 +398,14 @@ export class BeatLanesEngine {
         this.shake(5, 200); this.flash('255,80,110', 220); this.buzz(25);
         this.tone(160, 0.16, 'sawtooth', 0.1, 0, 70);
       } else {
+        // Whatever the grade, a tapped tile pops right where it was.
+        const tileBottom = hitY - ((r.chart[i].t - (t - r.offset)) / DIFFICULTY[r.difficulty].travelMs) * hitY;
+        this.tilePops.push({ lane, y: tileBottom, at: now });
         const perfect = g === 'perfect';
-        this.rings.push({ x: cx, y: hitY, at: now, color: LANE[lane].light, big: perfect });
-        this.burst(cx, hitY, perfect ? 16 : 8, [LANE[lane].light, LANE[lane].mid, '#fff', '#FFF3B0'], perfect ? 1 : 0.7);
-        this.pop(GRADE[g].text, cx, hitY - 40, GRADE[g].color, perfect ? 26 : 20, 0.7, 40);
+        const early = g === 'early';
+        this.rings.push({ x: cx, y: Math.min(tileBottom, hitY), at: now, color: LANE[lane].light, big: perfect });
+        this.burst(cx, Math.min(tileBottom, hitY) - 20, perfect ? 16 : early ? 6 : 8, [LANE[lane].light, LANE[lane].mid, '#fff', '#FFF3B0'], perfect ? 1 : early ? 0.5 : 0.7);
+        this.pop(GRADE[g].text, cx, Math.min(tileBottom, hitY) - 44, GRADE[g].color, perfect ? 26 : early ? 17 : 20, 0.7, 40);
         this.buzz(8);
       }
     });
@@ -649,7 +657,7 @@ export class BeatLanesEngine {
       run.chart.forEach((note, idx) => {
         const grade = run.result.grades[idx];
         const dt = note.t - adj;
-        if (dt > cfg.travelMs + 60 || dt < -520 || grade === 'perfect' || grade === 'good') return;
+        if (dt > cfg.travelMs + 60 || dt < -520 || grade === 'perfect' || grade === 'good' || grade === 'early') return;
         const yb = hitY - (dt / cfg.travelMs) * hitY;
         const x = note.lane * laneW + 4;
         const w = laneW - 8;
@@ -681,6 +689,21 @@ export class BeatLanesEngine {
         ctx.fillText(note.id % 2 ? '\u266B' : '\u266A', 0, tileH * 0.08);
         ctx.restore();
       });
+
+      // tapped tiles: a quick swell and fade, so every tap visibly lands
+      for (const tp of this.tilePops) {
+        const age = (now - tp.at) / 200;
+        const col = LANE[tp.lane];
+        const sc = 1 + (this.reduceMotion ? 0 : 0.45 * age);
+        ctx.save();
+        ctx.globalAlpha = 1 - age;
+        ctx.translate(tp.lane * laneW + laneW / 2, tp.y - tileH / 2);
+        ctx.scale(sc, sc);
+        if (!this.reduceMotion) { ctx.shadowColor = `rgba(${col.rgb},0.9)`; ctx.shadowBlur = 26; }
+        ctx.fillStyle = col.light;
+        this.rr(-(laneW - 8) / 2, -tileH / 2, laneW - 8, tileH, 16); ctx.fill();
+        ctx.restore();
+      }
 
       // hit rings
       for (const rg of this.rings) {

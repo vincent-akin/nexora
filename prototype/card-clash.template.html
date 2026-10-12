@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nexora Card Clash (prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/*__CSS__*/
+*, *::before, *::after { box-sizing: border-box; }
+html { height: 100%; }
+body {
+  margin: 0; min-height: 100%; color: #E9F3F4; font: 500 15px/1.5 'Manrope', system-ui, sans-serif;
+  padding: env(safe-area-inset-top, 0px) 12px env(safe-area-inset-bottom, 0px);
+  background: radial-gradient(900px 480px at 85% -8%, rgba(124, 108, 255, 0.14), transparent 70%), #0A0D16;
+}
+.top { width: min(100%, 520px); margin: 0 auto; padding: 14px 4px; display: flex; align-items: center; justify-content: space-between; }
+.top b { font: 600 18px 'Manrope', sans-serif; letter-spacing: -0.02em; }
+.top small { color: #9BA5BD; font-weight: 600; }
+.vault .vpanel[hidden], .vault .v-popup-back[hidden] { display: none; }
+</style>
+</head>
+<body>
+  <div class="top"><b>Nexora</b><small>Card Clash prototype</small></div>
+
+  <main class="vault" id="vault">
+    <div class="vb-wrap" id="board"></div>
+    <div id="notice" class="vhint" role="status" style="position:absolute;top:10px;left:0;right:0;text-align:center;z-index:5"></div>
+
+    <section class="vpanel" id="menu" aria-labelledby="menuTitle">
+      <div class="vhero">
+        <span id="door" aria-hidden="true"></span>
+        <div>
+          <h1 class="vtitle" id="menuTitle">Card Clash</h1>
+          <p class="vtag">Find every pair before the vault locks.</p>
+        </div>
+      </div>
+      <div class="vgroup">
+        <span class="vlabel" id="diffLabel">Choose a vault</span>
+        <div class="vseg" role="radiogroup" aria-labelledby="diffLabel" id="diffSeg"></div>
+      </div>
+      <label class="vcheck"><input type="checkbox" id="sound" checked> Sound on</label>
+      <div class="vactions"><button class="vbtn gold" id="startBtn" type="button">Open the vault</button></div>
+      <p class="vhint" id="bestLine"></p>
+      <p class="vhint">Flip two cards at a time. Matches stay face up, mistakes cost points, and quick clears earn a time bonus.</p>
+      <p class="vhint">In this prototype a small local stand-in plays the part of the server. In the real app the deck is dealt and kept on the server, and every flip is checked there.</p>
+    </section>
+
+    <section class="vpanel" id="results" aria-labelledby="resTitle" hidden>
+      <h2 id="resTitle">Vault cracked!</h2>
+      <div class="vkeys" id="keys" role="img"></div>
+      <div class="vscore" id="resScore">0</div>
+      <dl class="vstats">
+        <div><dt>Pairs</dt><dd id="sPairs">0</dd></div>
+        <div><dt>Mistakes</dt><dd id="sMiss">0</dd></div>
+        <div><dt>Time</dt><dd id="sTime">0</dd></div>
+        <div><dt>Best streak</dt><dd id="sStreak">0</dd></div>
+        <div><dt>Accuracy</dt><dd id="sAcc">0%</dd></div>
+        <div><dt>Flips</dt><dd id="sFlips">0</dd></div>
+      </dl>
+      <div class="vribbon" id="ribbon"></div>
+      <div class="vchips" id="chips" aria-label="Rewards earned"></div>
+      <p class="vhint">Prototype only, nothing is saved. Airdrop Points are a campaign metric and do not guarantee a token allocation.</p>
+      <div class="vactions sticky-actions">
+        <button class="vbtn gold" id="againBtn" type="button">Play again</button>
+        <button class="vbtn" id="menuBtn" type="button">Menu</button>
+      </div>
+    </section>
+  </main>
+
+<script>
+/*__CODE__*/
+</script>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('nexora.' + k); return v === null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('nexora.' + k, String(v)); } catch (e) { /* storage unavailable */ } },
+  };
+  const label = (d) => d[0].toUpperCase() + d.slice(1);
+  const mmss = (ms) => Math.floor(ms / 60000) + ':' + String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
+  const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let difficulty = store.get('cc.difficulty', 'normal');
+  if (!CARD_CONFIG[difficulty]) difficulty = 'normal';
+  let soundOn = store.get('cc.sound', '1') === '1';
+
+  // A local stand-in for the server: it deals the deck, keeps it private, and stamps every flip
+  // with its own clock. The real app does exactly this behind /api/cards.
+  class LocalServer {
+    constructor(diff) {
+      this.difficulty = diff;
+      this.deck = dealDeck(crypto.getRandomValues(new Uint32Array(1))[0], diff);
+      this.flips = [];
+      this.t0 = performance.now();
+    }
+    async flip(index) {
+      await delay(110 + Math.random() * 130); // pretend network
+      const out = applyFlip(this.deck, this.flips, index, performance.now() - this.t0, this.difficulty);
+      if (!out.ok) {
+        if (out.reason === 'time_up') throw { final: this.final() };
+        throw new Error(out.reason);
+      }
+      this.flips = out.flips;
+      const s = out.state;
+      return { face: out.face, result: out.result, done: s.done, score: s.score, streak: s.streak, matched: s.matchedPairs, mismatches: s.mismatches, final: s.done ? this.final() : null };
+    }
+    async finish() { return this.final(); }
+    final() {
+      const v = validateCardRun(this.deck, this.flips, this.difficulty);
+      const f = v.final || finalizeCards(this.deck, this.flips, this.difficulty);
+      const r = cardRewardFor(f, this.difficulty, v.verdict);
+      return Object.assign({}, f, { verdict: v.verdict, flags: v.flags, reasons: v.reasons, granted: { xp: r.xp, coins: r.coins, airdrop_points: r.airdropPoints } });
+    }
+  }
+
+  $('door').innerHTML = VAULT_DOOR_SVG;
+  $('sound').checked = soundOn;
+  const board = new CardBoard($('board'));
+
+  function show(id) { $('menu').hidden = id !== 'menu'; $('results').hidden = id !== 'results'; }
+  function buildDifficulty() {
+    const seg = $('diffSeg');
+    seg.innerHTML = '';
+    Object.keys(CARD_CONFIG).forEach((d) => {
+      const c = CARD_CONFIG[d];
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(d === difficulty));
+      b.innerHTML = label(d) + '<span>' + c.pairs + ' pairs, ' + c.timeLimitMs / 1000 + ' s</span>';
+      b.addEventListener('click', () => { difficulty = d; store.set('cc.difficulty', d); buildDifficulty(); updateBest(); });
+      seg.appendChild(b);
+    });
+  }
+  function updateBest() {
+    const best = Number(store.get('cc.best.' + difficulty, 0));
+    $('bestLine').textContent = best ? 'Your best on ' + difficulty + ': ' + best.toLocaleString() : '';
+  }
+  function countUp(el, value, ms) {
+    if (reduceMotion || !value) { el.textContent = value.toLocaleString(); return; }
+    const t0 = performance.now();
+    const step = (t) => {
+      const p = Math.min(1, (t - t0) / ms);
+      el.textContent = Math.round(value * (1 - Math.pow(1 - p, 3))).toLocaleString();
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  let noticeTimer = 0;
+  function notice(msg) { $('notice').textContent = msg; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('notice').textContent = ''; }, 2600); }
+
+  $('sound').addEventListener('change', (e) => { soundOn = e.target.checked; board.setSound(soundOn); store.set('cc.sound', soundOn ? '1' : '0'); });
+
+  function start() {
+    board.unlockAudio();
+    const server = new LocalServer(difficulty);
+    if (location.search.indexOf('debug') >= 0) window.__cardServer = server; // for automated tests only
+    const c = CARD_CONFIG[difficulty];
+    show(null);
+    board.start({ cols: c.cols, rows: c.rows, pairs: c.pairs, timeLimitMs: c.timeLimitMs, api: server, sound: soundOn, onEnd: end, onError: notice });
+  }
+
+  function end(f) {
+    const keys = f.verdict === 'rejected' ? 0 : keysFor(f.quality, f.cleared);
+    $('resTitle').textContent = f.cleared ? 'Vault cracked!' : 'The vault locked';
+    countUp($('resScore'), f.score, 900);
+    $('sPairs').textContent = f.matchedPairs + '/' + f.totalPairs;
+    $('sMiss').textContent = f.mismatches;
+    $('sTime').textContent = f.cleared ? mmss(f.timeMs) : 'Locked';
+    $('sStreak').textContent = f.bestStreak;
+    $('sAcc').textContent = Math.round(f.quality * 100) + '%';
+    $('sFlips').textContent = f.flipCount;
+    $('keys').setAttribute('aria-label', keys + ' out of 3 keys');
+    $('keys').innerHTML = [0, 1, 2].map((i) => '<span class="k' + (i < keys ? ' on' : '') + '" style="--i:' + i + '">' + icon('key', 64) + '</span>').join('');
+    const rb = $('ribbon');
+    rb.className = 'vribbon';
+    if (f.verdict === 'accepted') { rb.textContent = 'Run accepted'; rb.classList.add('ok'); }
+    else if (f.verdict === 'flagged') { rb.textContent = 'Run flagged for review: ' + f.flags.join(', '); rb.classList.add('warn'); }
+    else { rb.textContent = 'Run not accepted: ' + f.reasons.join(', '); rb.classList.add('bad'); }
+    const g = f.granted || {};
+    const defs = [['star', 'XP', g.xp || 0], ['coin', 'Coins', g.coins || 0], ['gem', 'Airdrop Points', g.airdrop_points || 0]];
+    $('chips').innerHTML = defs.map((d, i) => '<span class="vchip" style="--i:' + i + '">' + icon(d[0], 24) + '+<b data-v="' + d[2] + '">0</b> ' + d[1] + '</span>').join('');
+    $('chips').querySelectorAll('b').forEach((b) => { b.style.font = 'inherit'; setTimeout(() => countUp(b, Number(b.dataset.v), 700), 650); });
+    if (f.verdict !== 'rejected' && f.score > Number(store.get('cc.best.' + difficulty, 0))) store.set('cc.best.' + difficulty, f.score);
+    updateBest();
+    show('results');
+    $('againBtn').focus({ preventScroll: true });
+  }
+
+  $('startBtn').addEventListener('click', start);
+  $('againBtn').addEventListener('click', start);
+  $('menuBtn').addEventListener('click', () => show('menu'));
+  buildDifficulty(); updateBest(); show('menu');
+})();
+</script>
+</body>
+</html>

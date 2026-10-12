@@ -9,7 +9,7 @@
  */
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
-export type Grade = 'perfect' | 'good' | 'miss';
+export type Grade = 'perfect' | 'good' | 'early' | 'miss';
 export type Verdict = 'accepted' | 'flagged' | 'rejected';
 
 /** A note the player must hit. `t` is ms from run start. */
@@ -23,7 +23,7 @@ export interface DifficultyConfig {
   maxMisses: number;
   /** Chance that an eighth-note step contains a note. */
   density: number;
-  /** Display only: how long a note takes to fall to the hit line. */
+  /** How long a tile takes to fall from the top of the screen to the hit line. Also sets how early a tile can be tapped. */
   travelMs: number;
 }
 
@@ -32,6 +32,15 @@ export const LEAD_IN_MS = 2000;
 export const TAIL_MS = 1500;
 /** Hit windows, in ms either side of the note time. */
 export const WINDOWS = { perfectMs: 45, goodMs: 110 } as const;
+/**
+ * A tile can be tapped as soon as it is on screen. Taps earlier than the good
+ * window still pop the tile, but score as 'early': a little credit, no lost
+ * life, and the combo neither grows nor breaks.
+ */
+export const EARLY_FRACTION = 0.9;
+export const earlyWindowMs = (d: Difficulty): number => Math.round(DIFFICULTY[d].travelMs * EARLY_FRACTION);
+export const EARLY_POINTS = 20;
+export const EARLY_WEIGHT = 0.25;
 /** Largest timing offset a player may calibrate. */
 export const OFFSET_LIMIT_MS = 150;
 
@@ -104,12 +113,14 @@ export interface RunResult {
   combo: number;
   perfects: number;
   goods: number;
+  /** Tiles popped before the good window opened. Low credit, no life lost. */
+  earlies: number;
   /** Notes that went past without a hit. */
   misses: number;
   /** Taps that did not match any note. They count against the miss limit. */
   strays: number;
   totalNotes: number;
-  /** Weighted hits over all notes in the chart, 0 to 1 (perfect 1, good 0.6). */
+  /** Weighted hits over all notes in the chart, 0 to 1 (perfect 1, good 0.6, early 0.25). */
   accuracy: number;
   /** False when the miss limit ended the run early. */
   completed: boolean;
@@ -140,6 +151,7 @@ export function evaluateRun(
   const cfg = DIFFICULTY[difficulty];
   const offset = clampOffset(offsetMs);
   const { goodMs, perfectMs } = WINDOWS;
+  const earlyMs = earlyWindowMs(difficulty);
 
   type Ev = { time: number; kind: 0 | 1; idx: number };
   const events: Ev[] = [];
@@ -159,6 +171,7 @@ export function evaluateRun(
   let maxCombo = 0;
   let perfects = 0;
   let goods = 0;
+  let earlies = 0;
   let misses = 0;
   let strays = 0;
   let endedAtMs: number | null = null;
@@ -184,16 +197,24 @@ export function evaluateRun(
       }
       const note = noteIdx === undefined ? undefined : chart[noteIdx];
       const delta = note ? ev.time - note.t : Infinity;
-      if (noteIdx !== undefined && note && Math.abs(delta) <= goodMs) {
-        const grade: Grade = Math.abs(delta) <= perfectMs ? 'perfect' : 'good';
-        grades[noteIdx] = grade;
-        deltas.push(delta);
+      // The lowest unresolved tile in the lane is the one a tap lands on.
+      if (noteIdx !== undefined && note && delta >= -earlyMs && delta <= goodMs) {
         const mult = 1 + 0.25 * Math.min(4, Math.floor(combo / 10));
-        score += Math.round((grade === 'perfect' ? 100 : 60) * mult);
-        if (grade === 'perfect') perfects++;
-        else goods++;
-        combo++;
-        if (combo > maxCombo) maxCombo = combo;
+        if (Math.abs(delta) <= goodMs) {
+          const grade: Grade = Math.abs(delta) <= perfectMs ? 'perfect' : 'good';
+          grades[noteIdx] = grade;
+          deltas.push(delta);
+          score += Math.round((grade === 'perfect' ? 100 : 60) * mult);
+          if (grade === 'perfect') perfects++;
+          else goods++;
+          combo++;
+          if (combo > maxCombo) maxCombo = combo;
+        } else {
+          // Early: the tile pops and scores a little, but the streak is untouched.
+          grades[noteIdx] = 'early';
+          score += Math.round(EARLY_POINTS * mult);
+          earlies++;
+        }
       } else {
         strays++;
         if (fail(ev.time)) break;
@@ -205,13 +226,14 @@ export function evaluateRun(
     }
   }
 
-  const accuracy = chart.length ? (perfects + 0.6 * goods) / chart.length : 0;
+  const accuracy = chart.length ? (perfects + 0.6 * goods + EARLY_WEIGHT * earlies) / chart.length : 0;
   return {
     score,
     maxCombo,
     combo,
     perfects,
     goods,
+    earlies,
     misses,
     strays,
     totalNotes: chart.length,

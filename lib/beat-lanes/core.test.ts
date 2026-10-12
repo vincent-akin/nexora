@@ -4,6 +4,7 @@ import {
   DIFFICULTY,
   LANES,
   WINDOWS,
+  earlyWindowMs,
   evaluateRun,
   generateChart,
   mulberry32,
@@ -71,15 +72,39 @@ test('good window, perfect window and offset', () => {
   assert.equal(outside.goods, 0);
 });
 
-test('stray taps and misses end the run at the miss limit', () => {
+test('an early tap pops the tile: little credit, no life lost, combo untouched', () => {
+  const chart = generateChart(7, 'easy');
+  const early = chart.map((n) => ({ lane: n.lane, t: n.t - 500 }));
+  const r = evaluateRun(chart, early, 'easy');
+  assert.equal(r.earlies, chart.length);
+  assert.equal(r.misses + r.strays, 0);
+  assert.equal(r.completed, true);
+  assert.equal(r.combo, 0);
+  assert.equal(r.accuracy, 0.25);
+  assert.ok(r.score > 0);
+  // Every tile popped, so nothing is left to miss.
+  assert.ok(r.grades.every((g) => g === 'early'));
+});
+
+test('a tap before the tile is on screen is an empty tap', () => {
+  const chart = generateChart(7, 'easy');
+  const tooSoon = earlyWindowMs('easy') + 50;
+  const r = evaluateRun(chart, [{ lane: chart[0].lane, t: chart[0].t - tooSoon }], 'easy', 0, chart[0].t - tooSoon);
+  assert.equal(r.strays, 1);
+  assert.equal(r.earlies, 0);
+});
+
+test('button mashing never reaches the Airdrop Points threshold', () => {
   const chart = generateChart(9, 'hard');
-  const spam: Tap[] = [];
-  for (let t = 0; t < 20000; t += 70) spam.push({ lane: (t / 70) % LANES, t });
-  const r = evaluateRun(chart, spam, 'hard');
-  assert.equal(r.completed, false);
-  assert.ok(r.strays + r.misses >= DIFFICULTY.hard.maxMisses);
-  assert.ok(r.accuracy < 0.5);
-  const idle = evaluateRun(chart, [], 'easy');
+  const mash: Tap[] = [];
+  for (let t = 0; t < 76000; t += 75) mash.push({ lane: Math.floor(t / 75) % LANES, t });
+  const r = evaluateRun(chart, mash, 'hard');
+  assert.ok(r.accuracy < 0.5, `accuracy ${r.accuracy}`);
+  assert.equal(rewardFor(r, 'hard', 'accepted').airdropPoints, 0);
+});
+
+test('an idle run ends at the miss limit', () => {
+  const idle = evaluateRun(generateChart(9, 'easy'), [], 'easy');
   assert.equal(idle.completed, false);
   assert.equal(idle.score, 0);
 });

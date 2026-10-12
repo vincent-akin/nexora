@@ -78,6 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     maxCombo: result.maxCombo,
     perfects: result.perfects,
     goods: result.goods,
+    earlies: result.earlies,
     misses: result.misses,
     strays: result.strays,
     completed: result.completed,

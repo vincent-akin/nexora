@@ -1,19 +1,24 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { DIFFICULTY, type Difficulty } from '@/lib/beat-lanes/core';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Leaderboard({ searchParams }: { searchParams: Promise<{ d?: string }> }) {
-  const { d } = await searchParams;
-  const difficulty: Difficulty = d && d in DIFFICULTY ? (d as Difficulty) : 'normal';
+const GAMES = { beat_lanes: 'Beat Lanes', card_clash: 'Card Clash' } as const;
+const DIFFS = ['easy', 'normal', 'hard'] as const;
+type Game = keyof typeof GAMES;
+type Diff = (typeof DIFFS)[number];
+
+export default async function Leaderboard({ searchParams }: { searchParams: Promise<{ g?: string; d?: string }> }) {
+  const { g, d } = await searchParams;
+  const game: Game = g && g in GAMES ? (g as Game) : 'beat_lanes';
+  const difficulty: Diff = d && (DIFFS as readonly string[]).includes(d) ? (d as Diff) : 'normal';
   const supabase = await createClient();
 
   // Best accepted score per player. Flagged runs are excluded by the view.
   const { data: rows } = await supabase
     .from('leaderboard_best')
     .select('display_name,best_score,achieved_at')
-    .eq('game', 'beat_lanes')
+    .eq('game', game)
     .eq('difficulty', difficulty)
     .order('best_score', { ascending: false })
     .order('achieved_at', { ascending: true })
@@ -21,15 +26,18 @@ export default async function Leaderboard({ searchParams }: { searchParams: Prom
 
   return (
     <main className="page">
-      <div>
+      <div className="page-head">
         <h1>Leaderboard</h1>
         <p className="dim">Best accepted score per player. Ties go to whoever got there first.</p>
       </div>
+      <nav className="tabs" aria-label="Game">
+        {(Object.keys(GAMES) as Game[]).map((k) => (
+          <Link key={k} href={`/leaderboard?g=${k}&d=${difficulty}`} aria-current={k === game ? 'page' : undefined}>{GAMES[k]}</Link>
+        ))}
+      </nav>
       <nav className="tabs" aria-label="Difficulty">
-        {(Object.keys(DIFFICULTY) as Difficulty[]).map((k) => (
-          <Link key={k} href={`/leaderboard?d=${k}`} aria-current={k === difficulty ? 'page' : undefined}>
-            {k[0].toUpperCase() + k.slice(1)}
-          </Link>
+        {DIFFS.map((k) => (
+          <Link key={k} href={`/leaderboard?g=${game}&d=${k}`} aria-current={k === difficulty ? 'page' : undefined}>{k[0].toUpperCase() + k.slice(1)}</Link>
         ))}
       </nav>
       <section className="card">
@@ -43,7 +51,7 @@ export default async function Leaderboard({ searchParams }: { searchParams: Prom
             </tbody>
           </table>
         ) : (
-          <p className="dim">No scores yet on {difficulty}. Play a run to take the first place.</p>
+          <p className="dim">No scores yet for {GAMES[game]} on {difficulty}. Play a run to take first place.</p>
         )}
       </section>
     </main>
