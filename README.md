@@ -101,3 +101,5 @@ Clients can read their own rows and nothing else. Every write goes through a ser
 - Real-device testing of audio latency and touch timing.
 - Server and database clocks are compared with a 1.5 s tolerance in run validation; check this under real network conditions.
 - Legal review of the points wording in `lib/copy.ts` and a trademark check on the name "Nexora".
+
+  
