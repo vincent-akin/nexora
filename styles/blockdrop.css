@@ -1,0 +1,75 @@
+/* Block Drop: colourful falling blocks. Theme variables follow the sprint/detective pattern. */
+.blockdrop { --b-ink: #F1EEFF; --b-dim: #A59CCB; --b-accent: #B054E8; --b-accent-rgb: 176, 84, 232; --b-err: #FF6B7A;
+  position: relative; color: var(--b-ink); border-radius: 22px; padding: 14px; overflow: hidden; min-height: 560px;
+  background: radial-gradient(90% 60% at 50% 0%, rgba(var(--b-accent-rgb), 0.22), transparent 70%), linear-gradient(180deg, #120B26, #090614);
+  border: 1px solid rgba(var(--b-accent-rgb), 0.4); box-shadow: 0 0 40px rgba(var(--b-accent-rgb), 0.18); }
+.blockdrop.theme-emerald { --b-accent: #3DDC97; --b-accent-rgb: 61, 220, 151; background: radial-gradient(90% 60% at 50% 0%, rgba(61, 220, 151, 0.2), transparent 70%), linear-gradient(180deg, #08201A, #04100C); }
+.blockdrop.theme-obsidian { --b-accent: #C9D1DE; --b-accent-rgb: 201, 209, 222; background: radial-gradient(90% 60% at 50% 0%, rgba(201, 209, 222, 0.12), transparent 70%), linear-gradient(180deg, #14161B, #08090B); }
+.blockdrop .bd-wrap { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.blockdrop .bd-hud { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; max-width: 520px; }
+.blockdrop .bd-stat { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(var(--b-accent-rgb), 0.25); }
+.blockdrop .bd-label { font-size: 11px; color: var(--b-dim); }
+.blockdrop .bd-val { font: 800 20px/1.1 ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.blockdrop .bd-play { display: flex; gap: 10px; justify-content: center; align-items: flex-start; width: 100%; }
+.blockdrop .bd-side { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 84px; flex: none; }
+.blockdrop .bd-side canvas { width: 84px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(var(--b-accent-rgb), 0.25); }
+.blockdrop .bd-side canvas[data-k="hold"] { height: 84px; }
+.blockdrop .bd-side canvas[data-k="next"] { height: 252px; }
+.blockdrop .bd-well { position: relative; border-radius: 14px; padding: 4px; --hue: 270;
+  background: hsl(var(--hue) 70% 30% / 0.6); box-shadow: 0 0 0 2px hsl(var(--hue) 90% 62% / 0.85), 0 0 34px hsl(var(--hue) 90% 60% / 0.55); transition: box-shadow 0.6s, background 0.6s; }
+.blockdrop .bd-well canvas { display: block; border-radius: 10px; touch-action: none; }
+.blockdrop .bd-banner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; pointer-events: none; opacity: 0; text-align: center; }
+.blockdrop .bd-banner b { font: 900 clamp(26px, 7vw, 40px) ui-monospace, Menlo, monospace; color: #fff; text-shadow: 0 0 24px hsl(var(--hue) 100% 70%), 0 3px 0 rgba(0, 0, 0, 0.5); }
+.blockdrop .bd-banner span { font: 700 14px ui-monospace, Menlo, monospace; color: #fff; }
+.blockdrop .bd-banner.show { animation: bdBanner 1.5s ease-out both; }
+.blockdrop .bd-pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; max-width: 420px; }
+.blockdrop .bd-pad button { height: 48px; border-radius: 12px; font: 800 18px ui-monospace, Menlo, monospace; color: var(--b-ink); cursor: pointer; touch-action: none; user-select: none;
+  background: rgba(var(--b-accent-rgb), 0.16); border: 1px solid rgba(var(--b-accent-rgb), 0.5); box-shadow: 0 4px 0 rgba(var(--b-accent-rgb), 0.3); }
+.blockdrop .bd-pad button:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(var(--b-accent-rgb), 0.3); }
+.blockdrop .bd-pad .big { grid-column: span 1; font-size: 13px; background: var(--b-accent); color: #14081F; }
+.blockdrop .bd-keys { margin: 0; font-size: 12px; color: var(--b-dim); text-align: center; }
+@media (hover: none) { .blockdrop .bd-keys { display: none; } }
+@media (hover: hover) and (pointer: fine) { .blockdrop .bd-pad { display: none; } }
+
+.blockdrop .bp-panel { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; gap: 14px; padding: 26px 22px 22px; overflow-y: auto;
+  background: linear-gradient(180deg, rgba(18, 11, 38, 0.985), rgba(9, 6, 20, 0.995)); animation: bdIn 0.3s ease-out both; }
+.blockdrop .bp-panel p { margin: 0; color: var(--b-dim); font-size: 14px; }
+.blockdrop .bp-panel h1, .blockdrop .bp-panel h2 { margin: 0; letter-spacing: -0.02em; }
+.blockdrop .bp-title { font-size: clamp(30px, 8vw, 40px); background: linear-gradient(90deg, #29E0FF, #B054E8, #FF4D6D, #FFA02E); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.blockdrop .bp-panel h2 { font-size: 30px; text-align: center; color: var(--b-accent); }
+.blockdrop .bp-hero { display: flex; align-items: center; gap: 14px; }
+.blockdrop .bp-logo { display: grid; grid-template-columns: repeat(2, 20px); gap: 3px; flex: none; animation: bdFloat 2.4s ease-in-out infinite; }
+.blockdrop .bp-logo i { width: 20px; height: 20px; border-radius: 5px; }
+.blockdrop .bp-logo i:nth-child(1) { background: #29E0FF; } .blockdrop .bp-logo i:nth-child(2) { background: #FFD23F; }
+.blockdrop .bp-logo i:nth-child(3) { background: #FF4D6D; } .blockdrop .bp-logo i:nth-child(4) { background: #9BE82B; }
+.blockdrop .bp-check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+.blockdrop .bp-check input { accent-color: var(--b-accent); width: 16px; height: 16px; }
+.blockdrop .bp-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.blockdrop .bp-btn { font: 800 15px/1 inherit; color: #14081F; cursor: pointer; border-radius: 12px; padding: 14px 22px; background: var(--b-accent); border: 0; box-shadow: 0 0 26px rgba(var(--b-accent-rgb), 0.5); }
+.blockdrop .bp-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.blockdrop .bp-stam { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--b-dim); }
+.blockdrop .bp-bad { color: var(--b-err) !important; }
+.blockdrop .bp-hint { font-size: 12px !important; }
+.blockdrop .bp-stars { display: flex; justify-content: center; gap: 6px; }
+.blockdrop .bp-stars .st { opacity: 0.22; filter: grayscale(1); transform: scale(0.8); }
+.blockdrop .bp-stars .st.on { filter: none; animation: bdStar 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both; animation-delay: calc(var(--i) * 0.2s + 0.2s); }
+.blockdrop .bp-score { font: 800 56px/1 ui-monospace, Menlo, monospace; text-align: center; text-shadow: 0 0 26px rgba(var(--b-accent-rgb), 0.6); font-variant-numeric: tabular-nums; }
+.blockdrop .bp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.blockdrop .bp-stats div { border: 1px solid rgba(var(--b-accent-rgb), 0.28); border-radius: 10px; padding: 7px 10px; background: rgba(255, 255, 255, 0.04); display: flex; flex-direction: column; }
+.blockdrop .bp-stats dt { font-size: 11px; color: var(--b-dim); }
+.blockdrop .bp-stats dd { margin: 0; font: 800 20px/1.1 ui-monospace, Menlo, monospace; }
+.blockdrop .bp-ribbon { text-align: center; font: 700 13px inherit; padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(var(--b-accent-rgb), 0.3); background: rgba(255, 255, 255, 0.05); }
+.blockdrop .bp-ribbon.ok { color: var(--b-accent); } .blockdrop .bp-ribbon.warn { color: #FFD98A; }
+.blockdrop .bp-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.blockdrop .bp-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 8px; border-radius: 999px; font: 700 14px inherit; border: 1px solid rgba(var(--b-accent-rgb), 0.45); background: rgba(var(--b-accent-rgb), 0.1); animation: bdIn 0.4s ease-out both; animation-delay: calc(var(--i) * 0.14s + 0.5s); }
+.blockdrop button:focus-visible, .blockdrop input:focus-visible { outline: 2px solid var(--b-accent); outline-offset: 2px; }
+.blockdrop .bp-sticky { position: sticky; bottom: -22px; margin: 4px -22px -22px; padding: 14px 22px 22px; justify-content: center; background: linear-gradient(180deg, rgba(9, 6, 20, 0), rgba(9, 6, 20, 0.98) 40%); }
+
+@keyframes bdIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes bdFloat { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-5px) rotate(4deg); } }
+@keyframes bdStar { 0% { opacity: 0; transform: scale(0) rotate(-40deg); } 70% { opacity: 1; transform: scale(1.3) rotate(6deg); } 100% { opacity: 1; transform: none; } }
+@keyframes bdBanner { 0% { opacity: 0; transform: scale(0.6); } 15% { opacity: 1; transform: scale(1.08); } 25% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-12px); } }
+@media (prefers-reduced-motion: reduce) {
+  .blockdrop .bp-logo { animation: none; } .blockdrop .bp-panel, .blockdrop .bp-chip, .blockdrop .bp-stars .st.on { animation-duration: 0.01s; animation-delay: 0s; }
+  .blockdrop .bd-banner.show { animation-duration: 0.01s; opacity: 1; } .blockdrop .bd-well { transition: none; }
+}

@@ -5,12 +5,12 @@
  * score. The server replays the log and is the authority.
  */
 import {
-  DIFFICULTY,
+  beatConfig,
   WINDOWS,
   clampOffset,
   evaluateRun,
   generateChart,
-  type Difficulty,
+  type BeatSpec,
   type Note,
   type RunResult,
   type Tap,
@@ -34,12 +34,27 @@ const KEY_LABELS = ['D', 'F', 'J', 'K'];
 const LANE_HZ = [293.66, 329.63, 369.99, 440.0];
 const MIN_SAME_LANE_TAP_MS = 50; // above the server's 45 ms limit, so honest double-bounces are never rejected
 
-const LANE = [
+interface LaneColors { light: string; mid: string; dark: string; rgb: string }
+const DEFAULT_LANE: readonly LaneColors[] = [
   { light: '#FF9CCB', mid: '#FF4D9D', dark: '#C0176F', rgb: '255,77,157' },
   { light: '#9BF3FF', mid: '#29E0FF', dark: '#0E9CC0', rgb: '41,224,255' },
   { light: '#DDFF8A', mid: '#B6F23A', dark: '#6FA800', rgb: '182,242,58' },
   { light: '#FFD98A', mid: '#FFB02E', dark: '#E5701A', rgb: '255,176,46' },
-] as const;
+];
+/** The active tile palette. A purchased skin replaces it; there is one game on screen at a time. */
+let LANE: readonly LaneColors[] = DEFAULT_LANE;
+
+type Part = readonly [number, OscillatorType, number];
+interface Timbre { parts: readonly Part[]; decay: number }
+const TIMBRES: Record<string, Timbre> = {
+  default: { parts: [[1, 'triangle', 1], [2, 'sine', 0.22], [3, 'sine', 0.06]], decay: 0.9 },
+  marimba: { parts: [[1, 'sine', 1], [4, 'sine', 0.3], [10, 'sine', 0.07]], decay: 0.5 },
+  synth: { parts: [[1, 'sawtooth', 0.45], [2, 'square', 0.16], [0.5, 'sine', 0.3]], decay: 0.7 },
+};
+let TIMBRE: Timbre = TIMBRES.default;
+
+/** What an equipped skin and sound pack carry. Both are optional. */
+export interface BeatTheme { skin?: { palette?: LaneColors[] }; sound?: { timbre?: string } }
 const GRADE = {
   perfect: { text: 'PERFECT!', color: '#FFF3B0' },
   good: { text: 'Good', color: '#9BF3FF' },
@@ -66,7 +81,7 @@ interface Pop { text: string; x: number; y: number; at: number; life: number; co
 interface Ring { x: number; y: number; at: number; color: string; big: boolean }
 interface TilePop { lane: number; y: number; at: number }
 interface RunState {
-  chart: Note[]; difficulty: Difficulty; offset: number; start: number;
+  chart: Note[]; spec: BeatSpec; offset: number; start: number;
   taps: Tap[]; lastTapByLane: number[]; pressedUntil: number[];
   prevGrades: (string | null)[]; prevStrays: number; prevCombo: number; prevScore: number;
   scoreBump: number; comboBump: number; heartLostAt: number[]; cdIdx: number;
@@ -123,6 +138,13 @@ export class BeatLanesEngine {
   // ------------------------------------------------------------------ public API
   setSound(on: boolean) { this.opts.sound = on; }
 
+  /** Applies an equipped skin and sound pack. Passing nothing restores the defaults. */
+  setTheme(t?: BeatTheme) {
+    const pal = t?.skin?.palette;
+    LANE = pal && pal.length === 4 && pal.every((c) => c && c.light && c.mid && c.dark && c.rgb) ? pal : DEFAULT_LANE;
+    TIMBRE = TIMBRES[t?.sound?.timbre ?? 'default'] ?? TIMBRES.default;
+  }
+
   /** Must be called from a user gesture so the browser allows audio. */
   unlockAudio() {
     if (!this.audio) {
@@ -133,19 +155,19 @@ export class BeatLanesEngine {
   }
 
   /** `bot` plays every note perfectly, to demonstrate the anti-cheat checks. */
-  start(seed: number, difficulty: Difficulty, offsetMs: number, bot = false) {
+  start(seed: number, spec: BeatSpec, offsetMs: number, bot = false) {
     this.unlockAudio();
     this.cancelCalibration();
-    const chart = generateChart(seed, difficulty);
+    const chart = generateChart(seed, spec);
     const offset = clampOffset(offsetMs);
     this.particles = []; this.pops = []; this.rings = []; this.tilePops = [];
     this.run = {
-      chart, difficulty, offset, start: performance.now(), taps: [],
+      chart, spec, offset, start: performance.now(), taps: [],
       lastTapByLane: [-1e9, -1e9, -1e9, -1e9], pressedUntil: [0, 0, 0, 0],
       prevGrades: chart.map(() => null), prevStrays: 0, prevCombo: 0, prevScore: 0,
-      scoreBump: 0, comboBump: 0, heartLostAt: new Array(DIFFICULTY[difficulty].maxMisses).fill(0), cdIdx: -1,
+      scoreBump: 0, comboBump: 0, heartLostAt: new Array(beatConfig(spec).maxMisses).fill(0), cdIdx: -1,
       bot, botIdx: 0,
-      result: evaluateRun(chart, [], difficulty, offset, -Infinity),
+      result: evaluateRun(chart, [], spec, offset, -Infinity),
     };
     this.playing = true;
   }
@@ -251,9 +273,9 @@ export class BeatLanesEngine {
     const out = a.createGain();
     out.gain.setValueAtTime(0.0001, now);
     out.gain.exponentialRampToValueAtTime(0.3, now + 0.006);
-    out.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+    out.gain.exponentialRampToValueAtTime(0.0001, now + TIMBRE.decay);
     out.connect(a.destination);
-    ([[1, 'triangle', 1], [2, 'sine', 0.22], [3, 'sine', 0.06]] as const).forEach(([mult, type, level]) => {
+    TIMBRE.parts.forEach(([mult, type, level]) => {
       const osc = a.createOscillator();
       const g = a.createGain();
       osc.type = type;
@@ -262,7 +284,7 @@ export class BeatLanesEngine {
       osc.connect(g);
       g.connect(out);
       osc.start(now);
-      osc.stop(now + 0.95);
+      osc.stop(now + TIMBRE.decay + 0.05);
     });
   }
 
@@ -375,7 +397,7 @@ export class BeatLanesEngine {
         this.playNote(n.lane);
       }
     }
-    const res = evaluateRun(r.chart, r.taps, r.difficulty, r.offset, t - r.offset);
+    const res = evaluateRun(r.chart, r.taps, r.spec, r.offset, t - r.offset);
 
     // countdown beeps
     const cd = t < 600 ? 0 : t < 1200 ? 1 : t < 1800 ? 2 : t < 2300 ? 3 : 4;
@@ -399,7 +421,7 @@ export class BeatLanesEngine {
         this.tone(160, 0.16, 'sawtooth', 0.1, 0, 70);
       } else {
         // Whatever the grade, a tapped tile pops right where it was.
-        const tileBottom = hitY - ((r.chart[i].t - (t - r.offset)) / DIFFICULTY[r.difficulty].travelMs) * hitY;
+        const tileBottom = hitY - ((r.chart[i].t - (t - r.offset)) / beatConfig(r.spec).travelMs) * hitY;
         this.tilePops.push({ lane, y: tileBottom, at: now });
         const perfect = g === 'perfect';
         const early = g === 'early';
@@ -441,7 +463,7 @@ export class BeatLanesEngine {
     const lastNote = r.chart[r.chart.length - 1].t;
     if (res.endedAtMs !== null || t > lastNote + WINDOWS.goodMs + 450) {
       this.playing = false;
-      this.opts.onFinish({ taps: r.taps, offsetMs: r.offset, local: evaluateRun(r.chart, r.taps, r.difficulty, r.offset) });
+      this.opts.onFinish({ taps: r.taps, offsetMs: r.offset, local: evaluateRun(r.chart, r.taps, r.spec, r.offset) });
     }
   }
 
@@ -543,7 +565,7 @@ export class BeatLanesEngine {
     const playing = this.playing && !!run;
     const t = playing && run ? now - run.start : null;
     const adj = t !== null && run ? t - run.offset : now;
-    const bpm = run ? DIFFICULTY[run.difficulty].bpm : 96;
+    const bpm = run ? beatConfig(run.spec).bpm : 96;
     const beatMs = 60000 / bpm;
     const phase = ((((adj % beatMs) + beatMs) % beatMs)) / beatMs;
     const pulse = this.reduceMotion ? 0.3 : Math.pow(1 - phase, 3);
@@ -640,7 +662,7 @@ export class BeatLanesEngine {
     }
 
     if (playing && run && t !== null) {
-      const cfg = DIFFICULTY[run.difficulty];
+      const cfg = beatConfig(run.spec);
 
       // lane press beams
       for (let i = 0; i < 4; i++) {

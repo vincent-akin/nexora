@@ -1,7 +1,6 @@
 import type { Difficulty } from './core.ts';
 
 /** Minimum player level for each difficulty. Matches level_config in the seed data. */
-export const DIFFICULTY_MIN_LEVEL: Record<Difficulty, number> = { easy: 1, normal: 1, hard: 3 };
 
 export interface LevelRow { level: number; name: string; xp_required: number }
 

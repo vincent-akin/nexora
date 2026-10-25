@@ -1,0 +1,42 @@
+/*
+ * BRAND TOKENS: the one place to retune the platform's colours.
+ *
+ * PROVISIONAL PALETTE. These are NOT yet matched to claim.rwaops.com: that page could not be
+ * read automatically (it renders with JavaScript), so these values are a placeholder. Replace
+ * the values below with the real RWA brand colours and the whole shell, the homepage, the
+ * dashboard, buttons, glows and the logo update together. Colour values in other files should
+ * always reference these variables.
+ */
+:root {
+  /* surfaces */
+  --bg: #0A0D16;
+  --surface: #121827;
+  --surface-2: #19213A;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.15);
+
+  /* text */
+  --text: #EDF0F7;
+  --muted: #9BA5BD;
+  --faint: #6C7792;
+
+  /* primary accent (buttons, links, active states, glows) */
+  --accent: #7C6CFF;
+  --accent-rgb: 124, 108, 255;
+  --accent-hi: #8C7DFF;      /* lighter end of button gradients */
+  --accent-lo: #5B4BE6;      /* darker end of button gradients */
+  --accent-lo-rgb: 91, 75, 230;
+  --accent-soft: #A99BFF;    /* progress bar highlight */
+  --accent-text: #C9C2FF;    /* accent used as text on dark */
+
+  /* secondary accents */
+  --gold: #F2C14E;
+  --teal: #2DD4BF;
+  --glow-b-rgb: 45, 212, 191;  /* second ambient glow */
+
+  /* status */
+  --danger: #FF7088;
+  --ok: #4ADE80;
+
+  --accent-2: var(--accent-lo);
+}

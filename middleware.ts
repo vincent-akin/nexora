@@ -21,7 +21,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = path.startsWith('/login') || path.startsWith('/auth');
+  const isPublic = path === '/' || path.startsWith('/login') || path.startsWith('/auth');
 
   if (!user && !isPublic) {
     if (path.startsWith('/api')) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
   }
   if (user && path === '/login') {
     const url = request.nextUrl.clone();
-    url.pathname = '/';
+    url.pathname = '/dashboard';
     url.search = '';
     return NextResponse.redirect(url);
   }

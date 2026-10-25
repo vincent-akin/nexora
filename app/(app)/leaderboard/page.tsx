@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-const GAMES = { beat_lanes: 'Beat Lanes', card_clash: 'Card Clash' } as const;
+const GAMES = { beat_lanes: 'Beat Lanes', block_drop: 'Block Drop', type_sprint: 'Type Sprint', market_detective: 'Market Detective' } as const;
 const DIFFS = ['easy', 'normal', 'hard'] as const;
 type Game = keyof typeof GAMES;
 type Diff = (typeof DIFFS)[number];

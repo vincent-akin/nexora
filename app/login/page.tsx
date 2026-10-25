@@ -9,7 +9,7 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const ref = params.get('ref') ?? '';
-  const [mode, setMode] = useState<'in' | 'up'>(ref ? 'up' : 'in');
+  const [mode, setMode] = useState<'in' | 'up'>(ref || params.get('mode') === 'up' ? 'up' : 'in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(params.get('error') ? 'That confirmation link did not work. Try signing in.' : null);
@@ -23,7 +23,7 @@ function LoginForm() {
     if (mode === 'in') {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setMessage('Email or password is incorrect.');
-      else router.replace('/');
+      else router.replace('/dashboard');
     } else {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -36,7 +36,7 @@ function LoginForm() {
       if (error) setMessage(error.message);
       else if (data.session) {
         await fetch('/api/referrals/apply', { method: 'POST' });
-        router.replace('/');
+        router.replace('/dashboard');
       } else setMessage('Check your email for a confirmation link, then sign in.');
     }
     setBusy(false);

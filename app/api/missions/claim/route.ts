@@ -11,8 +11,14 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   if (typeof body?.missionId !== 'string') return NextResponse.json({ error: 'bad_body' }, { status: 400 });
+  // Only the quiz uses an answer. It is checked on the server and never sent back.
+  const answer = typeof body.answer === 'string' ? body.answer.slice(0, 80) : null;
 
-  const { data, error } = await createAdminClient().rpc('claim_mission', { p_user: user.id, p_mission: body.missionId });
+  const { data, error } = await createAdminClient().rpc('claim_mission', {
+    p_user: user.id,
+    p_mission: body.missionId,
+    p_answer: answer,
+  });
   if (error) {
     const status = error.message.includes('unknown_mission') ? 404 : 500;
     return NextResponse.json({ error: 'claim_failed' }, { status });

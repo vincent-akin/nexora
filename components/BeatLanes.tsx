@@ -3,16 +3,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import '@/styles/game.css';
-import { BeatLanesEngine, starsFor, type FinishInfo } from '@/lib/beat-lanes/engine';
-import { DIFFICULTY, OFFSET_LIMIT_MS, type Difficulty } from '@/lib/beat-lanes/core';
-import { DIFFICULTY_MIN_LEVEL, levelForXp, type LevelRow } from '@/lib/beat-lanes/progression';
+import { BeatLanesEngine, starsFor, type BeatTheme, type FinishInfo } from '@/lib/beat-lanes/engine';
+import { BEAT_MAX_LEVEL, OFFSET_LIMIT_MS, beatConfig } from '@/lib/beat-lanes/core';
+import { levelForXp, type LevelRow } from '@/lib/beat-lanes/progression';
+import { BOOSTED_RUN_NOTE, type BoostKind } from '@/lib/boosts';
+import { BoostPicker, LevelPicker, type RunSetupTheme } from './RunSetup';
 import { POINTS_DISCLAIMER } from '@/lib/copy';
 import Icon from './Icon';
 import Mascot from './Mascot';
 import CountUp from './CountUp';
 import RewardPopup from './RewardPopup';
 
-interface Props { level: number; xp: number; levels: LevelRow[]; stamina: number; staminaCap: number }
+interface Props {
+  level: number; xp: number; levels: LevelRow[]; stamina: number; staminaCap: number; theme?: BeatTheme;
+  /** Highest game level the player may start, and the boosts they own. */
+  unlocked: number; owned: Partial<Record<BoostKind, number>>;
+  /** Admin practice mode: every level and boost is open, and nothing is earned. */
+  practice?: boolean;
+}
+
+const RS_THEME: RunSetupTheme = { accent: '#2DD4BF', accentRgb: '45, 212, 191', ink: '#EAF6FF', dim: '#8FA6C4' };
+const levelSummary = (n: number) => { const c = beatConfig({ level: n, boosts: [] }); return `${c.bpm} bpm, ${c.durationMs / 1000} s, ${c.maxMisses} hearts`; };
 
 interface ServerResult {
   verdict: 'accepted' | 'flagged' | 'rejected';
@@ -27,6 +38,11 @@ interface ServerResult {
   misses?: number;
   strays?: number;
   completed?: boolean;
+  level?: number;
+  boosts?: string[];
+  practice?: boolean;
+  cleared?: boolean;
+  unlocked?: number | null;
   granted?: { xp?: number; coins?: number; airdrop_points?: number };
 }
 
@@ -39,7 +55,7 @@ const store = {
 
 const TITLE = 'Beat Lanes'.split('');
 
-export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Props) {
+export default function BeatLanes({ xp, level, levels, stamina, staminaCap, theme, unlocked, owned, practice }: Props) {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<BeatLanesEngine | null>(null);
@@ -50,7 +66,9 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
   progressRef.current = { xp, level, levels };
 
   const [phase, setPhase] = useState<Phase>('menu');
-  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [gameLevel, setGameLevel] = useState(Math.min(unlocked, BEAT_MAX_LEVEL));
+  const [boosts, setBoosts] = useState<BoostKind[]>([]);
+  const [ladder, setLadder] = useState(unlocked);
   const [offset, setOffset] = useState(0);
   const [sound, setSound] = useState(true);
   const [stamLeft, setStamLeft] = useState(stamina);
@@ -60,6 +78,7 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
   const [levelUp, setLevelUp] = useState<LevelRow | null>(null);
 
   useEffect(() => { setStamLeft(stamina); }, [stamina]);
+  useEffect(() => { setLadder(unlocked); }, [unlocked]);
   useEffect(() => {
     setOffset(Number(store.get('offset', '0')) || 0);
     const s = store.get('sound', '1') === '1';
@@ -84,6 +103,7 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
       const after = levelForXp(p.xp + (data.granted?.xp ?? 0), p.levels);
       if (data.verdict !== 'rejected') engineRef.current?.celebrate(starsFor(data.accuracy ?? 0, !!data.completed));
       setResult(data);
+      if (data.unlocked) { setLadder((u) => Math.max(u, data.unlocked!)); setGameLevel(Math.min(BEAT_MAX_LEVEL, data.unlocked)); }
       setLevelUp(after.level > before.level ? after : null);
       setPhase('results');
       router.refresh();
@@ -100,6 +120,9 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
     return () => engine.destroy();
   }, [submit]);
 
+  // Apply the equipped skin and sound pack (bought in the shop).
+  useEffect(() => { engineRef.current?.setTheme(theme); }, [theme]);
+
   async function start() {
     setError(null);
     setPhase('starting');
@@ -107,7 +130,7 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
     const res = await fetch('/api/runs/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ difficulty }),
+      body: JSON.stringify({ level: gameLevel, boosts }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -116,7 +139,11 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
         setError(`Out of stamina! The next bolt arrives in about ${mins} min.`);
         setStamLeft(data.stamina ?? 0);
       } else if (data.error === 'locked') {
-        setError(`That difficulty unlocks at level ${data.requiredLevel}.`);
+        setError(`Beat Lanes unlocks at level ${data.requiredLevel}.`);
+      } else if (data.error === 'level_locked') {
+        setError('That level is still locked. Clear the one before it first.');
+      } else if (data.error === 'boost_not_owned') {
+        setError('You do not own that boost any more. Buy more in the shop.');
       } else {
         setError('Could not start a run. Try again.');
       }
@@ -125,8 +152,9 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
     }
     sessionRef.current = data.sessionId;
     setStamLeft(data.stamina);
+    setBoosts([]);
     setPhase('playing');
-    engineRef.current?.start(data.seed, data.difficulty, offset);
+    engineRef.current?.start(data.seed, { level: data.level, boosts: data.boosts }, offset);
   }
 
   async function calibrate() {
@@ -169,20 +197,9 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
             </div>
           </div>
 
-          <div className="group">
-            <span className="label" id="bl-diff">Pick your challenge</span>
-            <div className="seg" role="radiogroup" aria-labelledby="bl-diff">
-              {(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => {
-                const locked = level < DIFFICULTY_MIN_LEVEL[d];
-                return (
-                  <button key={d} type="button" role="radio" data-d={d} aria-checked={d === difficulty} disabled={locked} onClick={() => setDifficulty(d)}>
-                    {d[0].toUpperCase() + d.slice(1)}
-                    <span>{locked ? `Unlocks at level ${DIFFICULTY_MIN_LEVEL[d]}` : `${DIFFICULTY[d].durationMs / 1000} s, ${DIFFICULTY[d].maxMisses} lives`}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <LevelPicker theme={RS_THEME} maxLevel={BEAT_MAX_LEVEL} unlocked={ladder} value={gameLevel} onChange={setGameLevel} summary={levelSummary(gameLevel)} />
+          <BoostPicker theme={RS_THEME} game="beat_lanes" owned={owned} selected={boosts} onChange={setBoosts} />
+          {practice ? <p className="hint">Practice mode: every level and boost is open and free. Nothing you earn here is paid or ranked.</p> : null}
 
           <div className="group">
             <label className="label" htmlFor="bl-offset">Timing offset</label>
@@ -261,6 +278,11 @@ export default function BeatLanes({ level, xp, levels, stamina, staminaCap }: Pr
               <div className={`ribbon ${result.verdict === 'accepted' ? 'ok' : 'warn'}`}>
                 {result.verdict === 'accepted' ? 'Run accepted' : 'Run flagged for review: Airdrop Points held'}
               </div>
+              <p className="hint">
+                {result.cleared ? `Level ${result.level} cleared.${(result.level ?? 0) < BEAT_MAX_LEVEL ? ` Level ${(result.level ?? 0) + 1} is open.` : ' You finished the ladder.'}` : `Level ${result.level} not cleared. Finish the song with 60% accuracy to unlock the next.`}
+                {result.boosts && result.boosts.length ? ` ${BOOSTED_RUN_NOTE}` : ''}
+                {result.practice ? ' Practice run: nothing was earned.' : ''}
+              </p>
               <div className="chips" aria-label="Rewards earned">
                 {chips.map((c, i) => (
                   <span className="chip" key={c.label} style={{ '--i': i } as React.CSSProperties}>

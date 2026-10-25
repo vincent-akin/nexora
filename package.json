@@ -8,8 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test lib/beat-lanes/core.test.ts lib/stamina.test.ts",
-    "build:prototype": "node scripts/build-prototype.mjs"
+    "test": "node --test lib/beat-lanes/core.test.ts lib/stamina.test.ts lib/type-sprint/core.test.ts lib/block-drop/core.test.ts lib/market-detective/core.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

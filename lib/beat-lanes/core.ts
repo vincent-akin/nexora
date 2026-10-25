@@ -8,7 +8,15 @@
  * validateSubmission() and rewardFor() with its own session data.
  */
 
+import { GAMES, clampLevel, scaleReward, tierFor } from '../levels.ts';
+import { hasBoost, type BoostKind } from '../boosts.ts';
+
+/** The reward tier a level belongs to. Levels, not tiers, are what the player picks. */
 export type Difficulty = 'easy' | 'normal' | 'hard';
+
+/** What a run is played at: the level on the ladder and the boosts spent on it. */
+export interface BeatSpec { level: number; boosts: BoostKind[] }
+export const BEAT_MAX_LEVEL = GAMES.beat_lanes.maxLevel;
 export type Grade = 'perfect' | 'good' | 'early' | 'miss';
 export type Verdict = 'accepted' | 'flagged' | 'rejected';
 
@@ -38,17 +46,31 @@ export const WINDOWS = { perfectMs: 45, goodMs: 110 } as const;
  * life, and the combo neither grows nor breaks.
  */
 export const EARLY_FRACTION = 0.9;
-export const earlyWindowMs = (d: Difficulty): number => Math.round(DIFFICULTY[d].travelMs * EARLY_FRACTION);
+export const earlyWindowMs = (spec: BeatSpec): number => Math.round(beatConfig(spec).travelMs * EARLY_FRACTION);
 export const EARLY_POINTS = 20;
 export const EARLY_WEIGHT = 0.25;
 /** Largest timing offset a player may calibrate. */
 export const OFFSET_LIMIT_MS = 150;
 
-export const DIFFICULTY: Record<Difficulty, DifficultyConfig> = {
-  easy: { bpm: 84, durationMs: 45000, maxMisses: 10, density: 0.55, travelMs: 1600 },
-  normal: { bpm: 104, durationMs: 60000, maxMisses: 8, density: 0.65, travelMs: 1350 },
-  hard: { bpm: 126, durationMs: 75000, maxMisses: 6, density: 0.75, travelMs: 1100 },
-};
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/**
+ * The ladder. Level 1 is a gentle 80 bpm with ten hearts. Level 10 is 128 bpm, denser notes, tiles
+ * that fall faster and a longer song, with six hearts. Each level is a small step on every axis.
+ * The Extra hearts boost adds three hearts and changes nothing else.
+ */
+export function beatConfig(spec: BeatSpec): DifficultyConfig {
+  const t = (clampLevel(spec.level, BEAT_MAX_LEVEL) - 1) / (BEAT_MAX_LEVEL - 1);
+  return {
+    bpm: Math.round(lerp(80, 128, t)),
+    durationMs: Math.round(lerp(45000, 78000, t) / 500) * 500,
+    maxMisses: Math.round(lerp(10, 6, t)) + (hasBoost(spec.boosts, 'life') ? 3 : 0),
+    density: Math.round(lerp(0.52, 0.76, t) * 1000) / 1000,
+    travelMs: Math.round(lerp(1650, 1100, t) / 5) * 5,
+  };
+}
+
+export const beatTier = (level: number): Difficulty => tierFor(level, BEAT_MAX_LEVEL);
 
 /** Placeholder economy values. The real values live in server-side rules config. */
 export const BASE_REWARD: Record<Difficulty, { xp: number; coins: number; points: number }> = {
@@ -86,8 +108,8 @@ function nextLane(lane: number, r: number): number {
  * so consecutive notes are always further apart than twice the good window and
  * a tap can never be ambiguous between two notes in the same lane.
  */
-export function generateChart(seed: number, difficulty: Difficulty): Note[] {
-  const cfg = DIFFICULTY[difficulty];
+export function generateChart(seed: number, spec: BeatSpec): Note[] {
+  const cfg = beatConfig(spec);
   const rnd = mulberry32(seed);
   const step = 60000 / cfg.bpm / 2;
   const notes: Note[] = [];
@@ -144,14 +166,14 @@ export function clampOffset(offsetMs: number): number {
 export function evaluateRun(
   chart: Note[],
   taps: Tap[],
-  difficulty: Difficulty,
+  spec: BeatSpec,
   offsetMs = 0,
   untilMs = Infinity,
 ): RunResult {
-  const cfg = DIFFICULTY[difficulty];
+  const cfg = beatConfig(spec);
   const offset = clampOffset(offsetMs);
   const { goodMs, perfectMs } = WINDOWS;
-  const earlyMs = earlyWindowMs(difficulty);
+  const earlyMs = earlyWindowMs(spec);
 
   type Ev = { time: number; kind: 0 | 1; idx: number };
   const events: Ev[] = [];
@@ -253,7 +275,7 @@ export interface Submission {
   /** Rebuilt by the server from the stored seed, never taken from the client. */
   chart: Note[];
   taps: Tap[];
-  difficulty: Difficulty;
+  spec: BeatSpec;
   offsetMs: number;
   /** Server time between session creation and this submission. */
   serverElapsedMs: number;
@@ -288,7 +310,7 @@ function rejected(reasons: string[]): Validation {
  * Airdrop Points are withheld and it goes to the review queue.
  */
 export function validateSubmission(s: Submission): Validation {
-  const cfg = DIFFICULTY[s.difficulty];
+  const cfg = beatConfig(s.spec);
   if (!Array.isArray(s.taps)) return rejected(['malformed_taps']);
   if (s.taps.length > s.chart.length * 3 + 20) return rejected(['too_many_taps']);
   if (!Number.isFinite(s.offsetMs) || Math.abs(s.offsetMs) > OFFSET_LIMIT_MS) {
@@ -321,7 +343,7 @@ export function validateSubmission(s: Submission): Validation {
     }
   }
 
-  const result = evaluateRun(s.chart, s.taps, s.difficulty, s.offsetMs);
+  const result = evaluateRun(s.chart, s.taps, s.spec, s.offsetMs);
   const lastTap = s.taps.length ? s.taps[s.taps.length - 1].t : 0;
   if (lastTap > s.serverElapsedMs + CLOCK_TOLERANCE_MS) reasons.push('taps_in_the_future');
   const chartEnd = s.chart.length ? s.chart[s.chart.length - 1].t + WINDOWS.goodMs : 0;
@@ -348,13 +370,16 @@ export interface Reward { xp: number; coins: number; airdropPoints: number }
  * applies in grant_reward(). Flagged runs still earn XP and Coins but no
  * Airdrop Points until a reviewer clears them.
  */
-export function rewardFor(result: RunResult, difficulty: Difficulty, verdict: Verdict): Reward {
+export function rewardFor(result: RunResult, spec: BeatSpec, verdict: Verdict): Reward {
   if (verdict === 'rejected') return { xp: 0, coins: 0, airdropPoints: 0 };
-  const base = BASE_REWARD[difficulty];
+  const base = BASE_REWARD[beatTier(spec.level)];
   const q = Math.max(0, Math.min(1, result.accuracy));
-  return {
-    xp: Math.round(base.xp * q),
-    coins: Math.round(base.coins * q),
-    airdropPoints: verdict === 'accepted' && q >= 0.5 ? base.points : 0,
-  };
+  // XP and Coins grow with the level. A boosted run never earns Airdrop Points.
+  return scaleReward(
+    { xp: Math.round(base.xp * q), coins: Math.round(base.coins * q), airdropPoints: verdict === 'accepted' && q >= 0.5 ? base.points : 0 },
+    spec.level, spec.boosts.length > 0,
+  );
 }
+
+/** A level is cleared by finishing the song without running out of hearts, at 60% accuracy or better. */
+export const beatCleared = (r: RunResult) => r.completed && r.accuracy >= 0.6;

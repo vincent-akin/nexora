@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateChart, rewardFor, validateSubmission, type Difficulty, type Tap } from '@/lib/beat-lanes/core';
+import { BEAT_MAX_LEVEL, beatCleared, generateChart, rewardFor, validateSubmission, type Tap } from '@/lib/beat-lanes/core';
+import { loadSession, sessionProblem } from '@/lib/settle';
+import { unlockLevel } from '@/lib/run-start';
+import type { BoostKind } from '@/lib/boosts';
 
 const MAX_BODY_BYTES = 200_000;
 
@@ -20,24 +23,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const admin = createAdminClient();
 
-  // The session, seed and difficulty come from our own record, never from the client.
-  const { data: session } = await admin
-    .from('game_sessions')
-    .select('id,user_id,difficulty,seed,status,started_at,expires_at')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .maybeSingle();
-  if (!session) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  if (session.status !== 'started' || new Date(session.expires_at).getTime() < Date.now()) {
-    return NextResponse.json({ error: 'session_closed' }, { status: 409 });
-  }
+  // The session, seed, level and boosts come from our own record, never from the client.
+  const look = await loadSession(admin, id, user.id, 'beat_lanes');
+  if (!look.ok) return sessionProblem(look);
+  const session = look.session;
 
-  const difficulty = session.difficulty as Difficulty;
-  const chart = generateChart(Number(session.seed), difficulty);
+  const spec = { level: session.level, boosts: session.boosts as BoostKind[] };
+  const chart = generateChart(Number(session.seed), spec);
   const validation = validateSubmission({
     chart,
     taps: body.taps as Tap[],
-    difficulty,
+    spec,
     offsetMs: Number(body.offsetMs ?? 0),
     serverElapsedMs: Date.now() - new Date(session.started_at).getTime(),
   });
@@ -48,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const result = validation.result;
-  const reward = rewardFor(result, difficulty, validation.verdict);
+  const reward = rewardFor(result, spec, validation.verdict);
   const { data: settled, error } = await admin.rpc('settle_game_run', {
     p_session: id,
     p_user: user.id,
@@ -68,7 +64,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   // May approve a pending referral for this player (idempotent, errors are not fatal).
-  await admin.rpc('qualify_referral', { p_referred: user.id });
+  if (!session.practice) await admin.rpc('qualify_referral', { p_referred: user.id });
+
+  // Finishing the song at 60% or better, in a run nobody has flagged, opens the next level.
+  const cleared = beatCleared(result);
+  const unlocked = cleared && validation.verdict === 'accepted' && !session.practice ? await unlockLevel(admin, user.id, 'beat_lanes', Math.min(BEAT_MAX_LEVEL, session.level + 1)) : null;
 
   return NextResponse.json({
     verdict: validation.verdict,
@@ -82,6 +82,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     misses: result.misses,
     strays: result.strays,
     completed: result.completed,
+    level: session.level,
+    boosts: spec.boosts,
+    practice: session.practice,
+    cleared,
+    unlocked,
     granted: settled?.grant?.granted ?? {},
   });
 }

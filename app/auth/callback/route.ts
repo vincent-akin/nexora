@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) await applyPendingReferral(user);
-      return NextResponse.redirect(`${origin}/`);
+      return NextResponse.redirect(`${origin}/dashboard`);
     }
   }
   return NextResponse.redirect(`${origin}/login?error=confirmation_failed`);

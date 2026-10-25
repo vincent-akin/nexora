@@ -4,8 +4,8 @@ export default function Logo({ size = 32 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
       <defs>
         <linearGradient id="nx-logo" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#8F7CFF" />
-          <stop offset="1" stopColor="#5B4BE6" />
+          <stop offset="0" style={{ stopColor: 'var(--accent-hi)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--accent-lo)' }} />
         </linearGradient>
       </defs>
       <rect width="32" height="32" rx="9" fill="url(#nx-logo)" />

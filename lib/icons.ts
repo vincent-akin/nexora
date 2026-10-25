@@ -97,6 +97,9 @@ export const LINE_PATHS: Record<string, string> = {
   cards: '<rect x="3" y="5" width="11" height="15" rx="2"/><path d="M17 8l3.500 1-3 11-3.500-1"/>',
   keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7.500 14h9"/>',
   chart: '<path d="M4 20V4M4 20h16"/><path d="M8 15l3-4 3 2 5-6"/>',
+  bag: '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+  speaker: '<path d="M4 10v4h4l5 4V6l-5 4z"/><path d="M16 9.500a4 4 0 0 1 0 5M18.500 7a7.500 7.500 0 0 1 0 10"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.200 0 1.800-.8 1.800-1.700 0-.500-.200-.900-.500-1.300-.300-.400-.500-.800-.500-1.300 0-1 .800-1.700 1.800-1.700H17a4 4 0 0 0 4-4C21 6.500 17 3 12 3z"/><circle cx="7.500" cy="11" r="1"/><circle cx="10" cy="7.500" r="1"/><circle cx="14.500" cy="7.500" r="1"/>',
 };
 
 export function lineIcon(name: string, size = 18): string {

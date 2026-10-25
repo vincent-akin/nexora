@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { isAdminSession } from '@/lib/admin';
 import { createClient } from '@/lib/supabase/server';
 import { levelForXp, type LevelRow } from '@/lib/beat-lanes/progression';
 import LineIcon from '@/components/LineIcon';
@@ -20,13 +21,13 @@ interface GameInfo {
 // Each game gets its own screen and its own look. The hub only lists them.
 const GAMES: GameInfo[] = [
   { slug: 'beat-lanes', title: 'Beat Lanes', tagline: 'Tap the falling tiles in time and make a tune.', icon: 'music', art: 'art-beat', minLevel: 1, live: true,
-    meta: [{ icon: 'clock', text: '45 to 75 s' }, { icon: 'bolt', text: '1 stamina' }] },
-  { slug: 'card-clash', title: 'Card Clash', tagline: 'Match every pair before the vault locks.', icon: 'cards', art: 'art-cards', minLevel: 2, live: true,
-    meta: [{ icon: 'clock', text: 'About 1 min' }, { icon: 'bolt', text: '1 stamina' }] },
-  { slug: 'type-sprint', title: 'Type Sprint', tagline: 'Race through words as fast and clean as you can.', icon: 'keyboard', art: 'art-type', minLevel: 3, live: false,
-    meta: [{ icon: 'clock', text: '30 s' }, { icon: 'bolt', text: '1 stamina' }] },
-  { slug: 'market-detective', title: 'Market Detective', tagline: 'Read the charts and spot the standout performer.', icon: 'chart', art: 'art-market', minLevel: 4, live: false,
-    meta: [{ icon: 'clock', text: 'About 2 min' }, { icon: 'bolt', text: '1 stamina' }] },
+    meta: [{ icon: 'clock', text: '45 to 75 s' }, { icon: 'bolt', text: '1 stamina' }, { icon: 'star', text: '10 levels' }] },
+  { slug: 'block-drop', title: 'Block Drop', tagline: 'Stack the colourful blocks. Every level falls faster.', icon: 'cards', art: 'art-blocks', minLevel: 2, live: true,
+    meta: [{ icon: 'clock', text: 'Up to 2.5 min' }, { icon: 'bolt', text: '1 stamina' }, { icon: 'star', text: '15 levels' }] },
+  { slug: 'type-sprint', title: 'Type Sprint', tagline: 'Words fall faster and get longer every level.', icon: 'keyboard', art: 'art-type', minLevel: 3, live: true,
+    meta: [{ icon: 'clock', text: 'Up to 2.5 min' }, { icon: 'bolt', text: '1 stamina' }, { icon: 'star', text: '12 levels' }] },
+  { slug: 'market-detective', title: 'Market Detective', tagline: 'Read the charts and spot the standout performer.', icon: 'chart', art: 'art-market', minLevel: 4, live: true,
+    meta: [{ icon: 'clock', text: 'About 2 min' }, { icon: 'bolt', text: '1 stamina' }, { icon: 'star', text: '10 levels' }] },
 ];
 
 function Art({ kind }: { kind: string }) {
@@ -53,16 +54,18 @@ export default async function Arena() {
     supabase.from('level_config').select('level,name,xp_required'),
   ]);
   const level = levelForXp(Number(bal?.xp ?? 0), (levels ?? []) as LevelRow[]);
+  const practice = await isAdminSession(supabase, user!.id);
 
   return (
     <main className="page">
       <section className="page-head">
         <h1>Arena</h1>
+        {practice ? <p className="notice">Admin practice mode: every game and level is open, boosts are free, and nothing you play earns rewards or appears in analytics.</p> : null}
         <p className="dim">Pick a game. Every game has its own screen, and all of them share your level, balances and stamina.</p>
       </section>
       <section className="games" aria-label="Games">
         {GAMES.map((g) => {
-          const unlocked = level.level >= g.minLevel;
+          const unlocked = level.level >= g.minLevel || practice;
           const playable = g.live && unlocked;
           const body = (
             <>
