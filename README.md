@@ -15,7 +15,6 @@ Web-based hybrid game platform, built from PRD v0.1: four games with level ladde
 | Real devices | Touch controls, audio latency and key repeat were not tested on real phones or keyboards. |
 
 ## Set up
-
 Needs Node 22.13 or newer and a Supabase project (hosted, or local with `supabase start`).
 
 1. **Database.** Run the migrations in order, `0001_foundation.sql` to `0007_admin_practice_rules.sql` (SQL editor or `supabase db push`). Every migration is needed: skipping `0003`, `0006` or `0007` is the usual cause of a game failing to start or save. Then run the check scripts: `foundation_checks.sql`, `engagement_checks.sql`, `card_clash_checks.sql` (it tests the shared state-saving function, still used by Market Detective), `task_checks.sql`, `shop_checks.sql`, `levels_checks.sql` and `admin_checks.sql`. Each rolls back and ends with `ALL CHECKS PASSED`. Fix anything they report before going further.
